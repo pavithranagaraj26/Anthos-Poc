@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License. - TEST
  */
-
 terraform {
   backend "gcs" {
-    bucket = "playground-s-11-8ba20866-tfstate"
-    prefix = "jenkins"
+    bucket = "anthos-poc"
+    prefix = "state-file"
   }
 }
