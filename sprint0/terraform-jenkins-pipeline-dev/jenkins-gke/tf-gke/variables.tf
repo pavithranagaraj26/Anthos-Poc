@@ -73,3 +73,13 @@ variable "github_repo" {
   description = "Github repo name."
   default     = "terraform-jenkins-pipeline"
 }
+
+variable "acm_repo_location" {
+  description = "The location of the git repo ACM will sync to"
+}
+variable "acm_branch" {
+  description = "The git branch ACM will sync to"
+}
+variable "acm_dir" {
+  description = "The directory in git ACM will sync to"
+}
