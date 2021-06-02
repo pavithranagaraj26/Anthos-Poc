@@ -10,51 +10,27 @@ monitoring.googleapis.com
 serviceusage.googleapis.com
 gcurl "https://serviceusage.googleapis.com/v1/projects/${PROJECT_NUMBER}/services?filter=state:DISABLED"
 */
-provider "google" {
-  project = var.project_id
-  region  = var.primary_region
-}
-
-data "google_client_config" "current" {}
-
-data "google_project" "project" {
-  project_id = var.project_id
-}
-
-output "project" {
-  value = data.google_client_config.current.project
-}
 
 /*****************************************
   Activate Services in Jenkins Project
  *****************************************/
-module "project-services" {
+module "enables-google-apis" {
   source  = "terraform-google-modules/project-factory/google//modules/project_services"
+  version = "6.0.0"
 
-  project_id  = data.google_client_config.current.project
-  disable_services_on_destroy = false
+  project_id = var.project_id
+
   activate_apis = [
-    "compute.googleapis.com",
     "iam.googleapis.com",
-    "container.googleapis.com",
     "cloudresourcemanager.googleapis.com",
-    "anthos.googleapis.com",
-    "cloudtrace.googleapis.com",
-    "meshca.googleapis.com",
-    "meshtelemetry.googleapis.com",
-    "meshconfig.googleapis.com",
-    "iamcredentials.googleapis.com",
-    "gkeconnect.googleapis.com",
-    "gkehub.googleapis.com",
-    "monitoring.googleapis.com",
+    "compute.googleapis.com",
     "containerregistry.googleapis.com",
+    "container.googleapis.com",
+    "storage-component.googleapis.com",
     "logging.googleapis.com",
-    "storage-component.googleapis.com"
-
+    "monitoring.googleapis.com",
   ]
 }
-
-
 
 /*****************************************
   Jenkins VPC
@@ -63,7 +39,7 @@ module "jenkins-vpc" {
   source  = "terraform-google-modules/network/google"
   version = "~> 2.0"
 
-  project_id   = module.project-services.project_id
+  project_id   = module.enables-google-apis.project_id
   network_name = var.network_name
 
   subnets = [
@@ -91,15 +67,14 @@ module "jenkins-vpc" {
 /*****************************************
   Jenkins GKE
  *****************************************/
-
 module "jenkins-gke" {
-  name                    = "primary"
-  project_id              = module.project-services.project_id
-  source                  = "terraform-google-modules/kubernetes-engine/google//modules/beta-public-cluster"
-  version                 = "13.0.0"
-  regional                = false
-  region                  = var.primary_region
-  zones                    = var.primary_zones
+  source                   = "terraform-google-modules/kubernetes-engine/google//modules/beta-public-cluster/"
+  version                  = "~> 7.0"
+  project_id               = module.enables-google-apis.project_id
+  name                     = "jenkins"
+  regional                 = false
+  region                   = var.region
+  zones                    = var.zones
   network                  = module.jenkins-vpc.network_name
   subnetwork               = module.jenkins-vpc.subnets_names[0]
   ip_range_pods            = var.ip_range_pods_name
@@ -108,11 +83,8 @@ module "jenkins-gke" {
   monitoring_service       = "monitoring.googleapis.com/kubernetes"
   remove_default_node_pool = true
   service_account          = "create"
-  identity_namespace       = "${module.project-services.project_id}.svc.id.goog"
+  identity_namespace       = "${module.enables-google-apis.project_id}.svc.id.goog"
   node_metadata            = "GKE_METADATA_SERVER"
-  release_channel         = "REGULAR"
-  cluster_resource_labels = { "mesh_id" : "proj-\${data.google_project.project.number}" }
-
   node_pools = [
     {
       name               = "butler-pool"
@@ -130,57 +102,11 @@ module "jenkins-gke" {
 }
 
 /*****************************************
-  Creating a HUB
- *****************************************/
-module "hub-primary" {
-  source           = "terraform-google-modules/kubernetes-engine/google//modules/hub"
-
-  project_id       = data.google_client_config.current.project
-  cluster_name     = module.jenkins-gke.name
-  location         = module.jenkins-gke.location
-  cluster_endpoint = module.jenkins-gke.endpoint
-  gke_hub_membership_name = "primary"
-  gke_hub_sa_name = "primary"
-}
-
-/*****************************************
-  Enabling Anthos Service Mesh
- *****************************************/
-module "asm-primary" {
-  source           = "terraform-google-modules/kubernetes-engine/google//modules/asm"
-  version          = "13.0.0"
-  project_id       = data.google_client_config.current.project
-  cluster_name     = module.jenkins-gke.name
-  location         = module.jenkins-gke.location
-  cluster_endpoint = module.jenkins-gke.endpoint
-
-  asm_dir          = "asm-dir-\${module.jenkins-gke.name}"
-
-}
-
-/*****************************************
-  Enabling Anthos configuration Management
- *****************************************/
-
-module "acm-primary" {
-  source           = "github.com/terraform-google-modules/terraform-google-kubernetes-engine//modules/acm"
-
-  project_id       = data.google_client_config.current.project
-  cluster_name     = module.primary-cluster.name
-  location         = module.primary-cluster.location
-  cluster_endpoint = module.primary-cluster.endpoint
-
-  operator_path    = "config-management-operator.yaml"
-  sync_repo        = var.acm_repo_location
-  sync_branch      = var.acm_branch
-  policy_dir       = var.acm_dir
-}
-/*****************************************
   IAM Bindings GKE SVC
  *****************************************/
 # allow GKE to pull images from GCR
 resource "google_project_iam_member" "gke" {
-  project = module.project-services.project_id
+  project = module.enables-google-apis.project_id
   role    = "roles/storage.objectViewer"
 
   member = "serviceAccount:${module.jenkins-gke.service_account}"
@@ -190,9 +116,9 @@ resource "google_project_iam_member" "gke" {
   Jenkins Workload Identity
  *****************************************/
 module "workload_identity" {
-  source              = "https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/tree/v14.3.0/examples/workload_identity"
+  source              = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
   version             = "~> 7.0"
-  project_id          = module.project-services.project_id
+  project_id          = module.enables-google-apis.project_id
   name                = "jenkins-wi-${module.jenkins-gke.name}"
   namespace           = "default"
   use_existing_k8s_sa = false
@@ -200,7 +126,7 @@ module "workload_identity" {
 
 # enable GSA to add and delete pods for jenkins builders
 resource "google_project_iam_member" "cluster-dev" {
-  project = module.project-services.project_id
+  project = module.enables-google-apis.project_id
   role    = "roles/container.developer"
   member  = module.workload_identity.gcp_service_account_fqn
 }
@@ -216,7 +142,7 @@ resource "kubernetes_secret" "jenkins-secrets" {
     name = var.jenkins_k8s_config
   }
   data = {
-    project_id          = module.project-services.project_id
+    project_id          = module.enables-google-apis.project_id
     kubernetes_endpoint = "https://${module.jenkins-gke.endpoint}"
     ca_certificate      = module.jenkins-gke.ca_certificate
     jenkins_tf_ksa      = module.workload_identity.k8s_service_account_name
@@ -251,7 +177,7 @@ resource "google_storage_bucket_iam_member" "tf-state-writer" {
   Grant Jenkins SA Permissions project editor
  *****************************************/
 resource "google_project_iam_member" "jenkins-project" {
-  project = module.project-services.project_id
+  project = module.enables-google-apis.project_id
   role    = "roles/editor"
   member = module.workload_identity.gcp_service_account_fqn
 }
@@ -261,9 +187,9 @@ data "local_file" "helm_chart_values" {
 }
 resource "helm_release" "jenkins" {
   name       = "jenkins"
-  repository = "https://charts.jenkins.io"
+  repository = "https://charts.helm.sh/stable"
   chart      = "jenkins"
-  #version    = "3.3.10"
+ # version    = "1.9.18"
   timeout    = 1200
   values = [data.local_file.helm_chart_values.content]
   depends_on = [
