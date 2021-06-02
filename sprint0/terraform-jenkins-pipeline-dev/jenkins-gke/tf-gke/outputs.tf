@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+output "project" {
+  value = data.google_client_config.current.project
+}
 output "kubernetes_endpoint" {
   description = "The cluster endpoint"
   sensitive   = true
