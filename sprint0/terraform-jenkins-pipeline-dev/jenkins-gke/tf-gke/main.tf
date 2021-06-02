@@ -33,7 +33,7 @@ module "enables-google-apis" {
 }
 
 /*****************************************
-  Jenkins VPC
+  Jenkins VPC 
  *****************************************/
 module "jenkins-vpc" {
   source  = "terraform-google-modules/network/google"
@@ -101,6 +101,7 @@ module "jenkins-gke" {
   ]
 }
 
+ 
 /*****************************************
   IAM Bindings GKE SVC
  *****************************************/
@@ -111,7 +112,50 @@ resource "google_project_iam_member" "gke" {
 
   member = "serviceAccount:${module.jenkins-gke.service_account}"
 }
+  
+/*****************************************
+ hub-primary
+ *****************************************/
+module "hub-primary" {
+  source           = "terraform-google-modules/kubernetes-engine/google//modules/hub"
 
+  project_id       = data.google_client_config.current.project
+  cluster_name     = module.primary-cluster.name
+  location         = module.primary-cluster.location
+  cluster_endpoint = module.primary-cluster.endpoint
+  gke_hub_membership_name = "primary"
+  gke_hub_sa_name = "primary"
+}
+/*****************************************
+ asm-primary
+ *****************************************/
+module "asm-primary" {
+  source           = "terraform-google-modules/kubernetes-engine/google//modules/asm"
+  version          = "13.0.0"
+  project_id       = data.google_client_config.current.project
+  cluster_name     = module.primary-cluster.name
+  location         = module.primary-cluster.location
+  cluster_endpoint = module.primary-cluster.endpoint
+
+  asm_dir          = "asm-dir-${module.primary-cluster.name}"
+
+}
+/*****************************************
+ acm-primary
+ *****************************************/
+module "acm-primary" {
+  source           = "github.com/terraform-google-modules/terraform-google-kubernetes-engine//modules/acm"
+
+  project_id       = data.google_client_config.current.project
+  cluster_name     = module.primary-cluster.name
+  location         = module.primary-cluster.location
+  cluster_endpoint = module.primary-cluster.endpoint
+
+  operator_path    = "config-management-operator.yaml"
+  sync_repo        = var.acm_repo_location
+  sync_branch      = var.acm_branch
+  policy_dir       = var.acm_dir
+}
 /*****************************************
   Jenkins Workload Identity
  *****************************************/
