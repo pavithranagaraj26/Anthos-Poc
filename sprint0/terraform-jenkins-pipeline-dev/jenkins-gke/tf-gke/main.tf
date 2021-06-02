@@ -10,7 +10,7 @@ monitoring.googleapis.com
 serviceusage.googleapis.com
 gcurl "https://serviceusage.googleapis.com/v1/projects/${PROJECT_NUMBER}/services?filter=state:DISABLED"
 */
-
+data "google_client_config" "current" {}
 /*****************************************
   Activate Services in Jenkins Project
  *****************************************/
