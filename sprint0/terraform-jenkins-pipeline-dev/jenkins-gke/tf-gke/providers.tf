@@ -17,19 +17,19 @@
 /*****************************************
   Google Provider Configuration
  *****************************************/
-provider "google" {
-  version = "~>  3.1"
-}
+# provider "google" {
+#   version = "~>  3.1"
+# }
 
-provider "google-beta" {
-  version = "~>  3.1"
-}
+# provider "google-beta" {
+#   version = "~>  3.1"
+# }
 
 /*****************************************
   Kubernetes provider configuration
  *****************************************/
 provider "kubernetes" {
-  version                = "~> 1.10"
+  #version                = "~> 1.10"
   load_config_file       = false
   host                   = module.jenkins-gke.endpoint
   token                  = data.google_client_config.default.access_token
@@ -51,7 +51,7 @@ module "gke_auth" {
 provider "helm" {
   kubernetes {
     //load_config_file       = false
-    config_path            = "~/.kube/config"
+    config_path            = "/home/cloud_user/.kube/config"
     cluster_ca_certificate = module.gke_auth.cluster_ca_certificate
     host                   = module.gke_auth.host
     token                  = module.gke_auth.token
